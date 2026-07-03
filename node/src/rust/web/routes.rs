@@ -19,7 +19,10 @@ use crate::rust::web::{events_info, status_info, version_info};
 pub struct Routes;
 
 impl Routes {
-    pub fn create_main_routes(reporting_enabled: bool, http_max_body_bytes: usize) -> Router<AppState> {
+    pub fn create_main_routes(
+        reporting_enabled: bool,
+        http_max_body_bytes: usize,
+    ) -> Router<AppState> {
         let cors = CorsLayer::new()
             .allow_origin(Any)
             .allow_methods(Any)
