@@ -124,6 +124,7 @@ pub trait WebApi {
         &self,
         term: String,
         block_hash: Option<String>,
+        deployer: Option<String>,
     ) -> Result<EstimateCostResponse>;
 
     /// Get current epoch rewards from PoS contract
@@ -600,6 +601,7 @@ impl WebApi for WebApiImpl {
             block_hash,
             use_pre_state_hash,
             self.dev_mode,
+            None,
         )
         .await?;
 
@@ -689,6 +691,7 @@ impl WebApi for WebApiImpl {
             Some(resolved_hash.clone()),
             false,
             self.dev_mode,
+            None,
         )
         .await?;
 
@@ -731,6 +734,7 @@ impl WebApi for WebApiImpl {
             Some(resolved_hash.clone()),
             false,
             self.dev_mode,
+            None,
         )
         .await?;
 
@@ -761,6 +765,7 @@ impl WebApi for WebApiImpl {
             Some(resolved_hash.clone()),
             false,
             self.dev_mode,
+            None,
         )
         .await?;
 
@@ -830,8 +835,18 @@ impl WebApi for WebApiImpl {
         &self,
         term: String,
         block_hash: Option<String>,
+        deployer: Option<String>,
     ) -> Result<EstimateCostResponse> {
         let (resolved_hash, block_number) = self.resolve_block(block_hash).await?;
+
+        let deployer_pk = deployer
+            .map(|hex_str| -> Result<PublicKey> {
+                let bytes = hex::decode(&hex_str)
+                    .map_err(|e| eyre!("Invalid deployer public key hex: {}", e))?;
+                PublicKey::validate_secp256k1_bytes(&bytes)?;
+                Ok(PublicKey::from_bytes(&bytes))
+            })
+            .transpose()?;
 
         let (_pars, _block, cost) = BlockAPI::exploratory_deploy(
             &self.engine_cell,
@@ -839,6 +854,7 @@ impl WebApi for WebApiImpl {
             Some(resolved_hash.clone()),
             false,
             self.dev_mode,
+            deployer_pk,
         )
         .await?;
 
@@ -866,6 +882,7 @@ impl WebApi for WebApiImpl {
             Some(resolved_hash.clone()),
             false,
             self.dev_mode,
+            None,
         )
         .await?;
 
@@ -903,6 +920,7 @@ impl WebApi for WebApiImpl {
             Some(resolved_hash.clone()),
             false,
             self.dev_mode,
+            None,
         )
         .await?;
 
@@ -1148,6 +1166,8 @@ pub struct ExploreDeployRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct SimpleExploreDeployRequest {
     pub term: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deployer: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]

@@ -8,6 +8,8 @@ use std::time::Instant;
 
 use crypto::rust::hash::blake2b512_random::Blake2b512Random;
 use crypto::rust::public_key::PublicKey;
+use crypto::rust::signatures::secp256k1::Secp256k1;
+use crypto::rust::signatures::signatures_alg::SignaturesAlg;
 use crypto::rust::signatures::signed::Signed;
 use models::rhoapi::expr::ExprInstance;
 use models::rhoapi::g_unforgeable::UnfInstance;
@@ -65,6 +67,8 @@ use crate::rust::util::rholang::system_deploy_user_error::{
 use crate::rust::util::rholang::tools::Tools;
 use crate::rust::util::rholang::{interpreter_util, system_deploy_util};
 use crate::rust::util::{construct_deploy, event_converter};
+
+static EXPLORATORY_DEPLOY_KEY: OnceLock<crypto::rust::private_key::PrivateKey> = OnceLock::new();
 
 pub struct RuntimeOps {
     pub runtime: RhoRuntimeImpl,
@@ -786,18 +790,40 @@ impl RuntimeOps {
         &mut self,
         term: String,
         hash: &StateHash,
+        deployer: Option<PublicKey>,
     ) -> Result<(Vec<Par>, u64), CasperError> {
         let deploy_result = async {
-            let deploy = construct_deploy::source_deploy(
-                term,
-                0,
-                // Hardcoded phlogiston limit / 1 REV if phloPrice=1
-                Some(100 * 1000 * 1000),
-                None,
-                Some(construct_deploy::DEFAULT_SEC.clone()),
-                None,
-                None,
-            )?;
+            // Hardcoded phlogiston limit / 1 REV if phloPrice=1
+            let phlo_limit = 100 * 1000 * 1000;
+            let deploy = match deployer {
+                Some(pk) => Signed {
+                    data: DeployData {
+                        term,
+                        time_stamp: 0,
+                        phlo_price: 1,
+                        phlo_limit,
+                        valid_after_block_number: 0,
+                        shard_id: String::new(),
+                        expiration_timestamp: None,
+                    },
+                    pk,
+                    sig: prost::bytes::Bytes::new(),
+                    sig_algorithm: Box::new(Secp256k1),
+                },
+                None => construct_deploy::source_deploy(
+                    term,
+                    0,
+                    Some(phlo_limit),
+                    None,
+                    Some(
+                        EXPLORATORY_DEPLOY_KEY
+                            .get_or_init(|| Secp256k1.new_key_pair().0)
+                            .clone(),
+                    ),
+                    None,
+                    None,
+                )?,
+            };
 
             // Create return channel as first private name created in deploy term
             let mut rand = Tools::unforgeable_name_rng(&deploy.pk, deploy.data.time_stamp);
